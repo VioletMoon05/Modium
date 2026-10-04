@@ -3,6 +3,7 @@
   var esc = A.esc, ic = A.ic;
   var TY = [['mods', 'Mod'], ['modpacks', 'Modpack'], ['resourcepacks', 'Gói tài nguyên'], ['plugins', 'Script'], ['shaders', 'Shader'], ['structures', 'Công trình']];
   var VS = [['public', 'Công khai', 'Ai cũng thấy và tìm được dự án.'], ['unlisted', 'Không công khai', 'Chỉ người có liên kết mới xem được.'], ['private', 'Riêng tư', 'Chỉ bạn và cộng tác viên xem được.']];
+  var PRES = ['8x', '16x', '32x', '48x', '64x', '128x', '256x', '512x'];
   var TN = {}, VN = {}; TY.forEach(function (t) { TN[t[0]] = t[1]; }); VS.forEach(function (t) { VN[t[0]] = t[1]; });
   var I = {
     box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
@@ -15,13 +16,20 @@
   };
   function hue(n) { var h = 0; for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) % 360; return h; }
   function num(n) { return n < 1e4 ? n.toLocaleString('en-US') : n < 1e6 ? (n / 1e3).toFixed(1) + 'K' : (n / 1e6).toFixed(1) + 'M'; }
-  function ago(t) { var d = Math.floor((Date.now() - t) / 864e5); return d < 1 ? 'Hôm nay' : d < 30 ? d + ' ngày trước' : d < 365 ? Math.floor(d / 30) + ' tháng trước' : Math.floor(d / 365) + ' năm trước'; }
+  function ago(t) {
+    var d = Math.floor((Date.now() - t) / 864e5);
+    if (L.get() === 'vi') return d < 1 ? 'Hôm nay' : d < 30 ? d + ' ngày trước' : d < 365 ? Math.floor(d / 30) + ' tháng trước' : Math.floor(d / 365) + ' năm trước';
+    try {
+      var relative = new Intl.RelativeTimeFormat(L.get(), { numeric: 'auto' });
+      return d < 1 ? relative.format(0, 'day') : d < 30 ? relative.format(-d, 'day') : d < 365 ? relative.format(-Math.floor(d / 30), 'month') : relative.format(-Math.floor(d / 365), 'year');
+    } catch (e) { return d < 1 ? 'today' : d < 30 ? d + ' days ago' : d < 365 ? Math.floor(d / 30) + ' months ago' : Math.floor(d / 365) + ' years ago'; }
+  }
   var CN = null;
   function cn(c) { if (!CN) { CN = {}; TY.forEach(function (t) { BR.cats(t[0]).forEach(function (x) { CN[x[0]] = x[1]; }); }); } return CN[c] || c; }
   function thumb(p, cls) {
     return p.icon ? '<img class="pic ' + cls + '" src="' + esc(p.icon) + '" alt="">' : '<div class="pic ' + cls + '" style="background:linear-gradient(135deg,hsl(' + hue(p.name) + ' 68% 52%),hsl(' + ((hue(p.name) + 40) % 360) + ' 66% 36%))" aria-hidden="true">' + esc(p.name.charAt(0).toUpperCase()) + '</div>';
   }
-  function tags(p, all) { return '<span class="tag">' + TN[p.type] + '</span>' + p.cats.slice(0, all ? 20 : 3).map(function (c) { return '<span class="tag">' + esc(cn(c)) + '</span>'; }).join(''); }
+   function tags(p, all) { return '<span class="tag">' + TN[p.type] + '</span>' + (p.resolution ? '<span class="tag">' + esc(p.resolution) + '</span>' : '') + p.cats.slice(0, all ? 20 : 3).map(function (c) { return '<span class="tag">' + esc(cn(c)) + '</span>'; }).join(''); }
   function stat(i, t) { return '<span>' + ic(I[i]) + t + '</span>'; }
   function card(p) {
     return '<article class="pj">' + thumb(p, '') + '<div class="pb"><h3><a href="#/project/' + esc(p.slug) + '">' + esc(p.name) + '</a>' + (p.vis !== 'public' ? ' <span class="tag">' + VN[p.vis] + '</span>' : '') + '</h3><p class="pd2">' + esc(p.summary) + '</p><div class="tgs">' + tags(p) + '</div></div>' +
@@ -33,10 +41,15 @@
   }
 
   /* ---------- hồ sơ (gọn, theo mẫu) ---------- */
-  function profile(name) {
-    var wanted = String(name || '').replace(/^@+/, ''), me = API.user(), self = !!me && (!wanted || wanted.toLowerCase() === me.username.toLowerCase()), u = self ? me : API.profileOf(wanted);
+  async function profile(name) {
+    var routeAtStart = location.hash, wanted = String(name || '').replace(/^@+/, ''), me = API.user(), self = !!me && (!wanted || wanted.toLowerCase() === me.username.toLowerCase()), u;
+    try { u = self ? me : await API.profileOf(wanted); } catch (e) { u = null; }
+    if (location.hash !== routeAtStart) return;
     if (!u) { app.innerHTML = '<div class="card empty"><h3>Không tìm thấy người dùng</h3><a class="btn p" href="#/">Về trang chủ</a></div>'; return; }
-    var list = API.userProjects(u.username), dls = list.reduce(function (a, p) { return a + p.downloads; }, 0), tab = 'all';
+    var list;
+    try { list = await API.userProjects(u.username); } catch (e) { list = []; }
+    if (location.hash !== routeAtStart) return;
+    var dls = list.reduce(function (a, p) { return a + p.downloads; }, 0), tab = 'all';
     app.innerHTML = '<header class="uh">' + A.avatar(u, true) + '<div class="uhi"><h1>' + esc(u.displayName || u.username) + '</h1><p class="handle">@' + esc(u.username) + '</p><p>' + (u.bio ? esc(u.bio) : 'Người dùng Modium.') + '</p>' +
       '<div class="pst"><span>' + ic(I.box) + list.length + ' dự án</span><i></i><span>' + ic(I.dl) + num(dls) + ' lượt tải</span><i></i><span>' + ic(I.cal) + 'Tham gia ' + esc(A.fmt(u.created)) + '</span></div></div>' +
       (self ? '<a class="btn" href="#/settings/profile">' + ic(I.edit) + 'Chỉnh sửa</a>' : '') + '</header><div id="pl"></div>';
@@ -45,21 +58,27 @@
       if (!list.length) { el.innerHTML = empty(self); return; }
       el.innerHTML = '<nav class="ptabs">' + [['all', 'Tất cả']].concat(types).map(function (t) { return '<button data-t="' + t[0] + '" class="' + (tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</nav>' +
         '<div class="rl rows">' + list.filter(function (p) { return tab === 'all' || p.type === tab; }).map(card).join('') + '</div>';
-      el.querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { tab = b.dataset.t; draw(); }; });
+      el.querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { tab = b.dataset.t; draw(); L.apply(el); }; });
     }
-    draw();
+    draw(); L.apply(app);
   }
 
-  function dash() {
-    var u = API.user(), l = API.userProjects(u.username);
+  async function dash() {
+    var routeAtStart = location.hash, u = API.user(), l;
+    if (!u) return;
+    try { l = await API.userProjects(u.username); } catch (e) { l = []; }
+    if (location.hash !== routeAtStart) return;
     app.innerHTML = '<div class="hi" style="margin-top:20px">Chào mừng trở lại, <b>' + esc(u.displayName || u.username) + '</b> <span class="handle">@' + esc(u.username) + '</span></div><h1 style="font-size:2.2rem;margin:6px 0 16px">Bảng điều khiển</h1>' +
       '<div class="qa"><div><b>' + l.length + '</b><small>Dự án</small></div><div><b>' + num(l.reduce(function (a, p) { return a + p.downloads; }, 0)) + '</b><small>Lượt tải</small></div><div><b>0</b><small>Người theo dõi</small></div></div>' +
       '<p><a class="btn p" href="#/new">' + ic(I.plus) + 'Tạo dự án</a></p>' + (l.length ? '<div class="rl rows" style="margin-bottom:60px">' + l.map(card).join('') + '</div>' : '');
+    L.apply(app);
   }
 
   /* ---------- trang dự án ---------- */
-  function project(slug) {
-    var p = API.getProject(slug);
+  async function project(slug) {
+    var p = null;
+    try { p = await API.getProject(slug); } catch (e) {}
+    if (location.hash.indexOf('#/project/') !== 0 || decodeURIComponent(location.hash.slice(10)) !== slug) return;
     if (!p) { app.innerHTML = '<div class="card empty"><h3>Không tìm thấy dự án</h3><p>Dự án không tồn tại hoặc đang ở chế độ riêng tư.</p><a class="btn p" href="#/">Về trang chủ</a></div>'; return; }
     var people = [[p.owner, 'Chủ sở hữu']].concat(p.collab.map(function (c) { return [c, 'Cộng tác viên']; })), TABS = [['d', 'Mô tả'], ['g', 'Thư viện'], ['c', 'Nhật ký thay đổi'], ['v', 'Phiên bản']];
     function box(t, b) { return '<section class="card sbx"><h3>' + t + '</h3>' + b + '</section>'; }
@@ -75,21 +94,22 @@
         : '<p style="margin:0">' + (t === 'v' ? 'Chưa có phiên bản nào được đăng.' : t === 'c' ? 'Chưa có thay đổi nào.' : 'Chưa có ảnh nào trong thư viện.') + '</p>';
     }
     body('d');
-    $('#pt').onclick = function (e) { var b = e.target.closest('[data-t]'); if (!b) return; this.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); body(b.dataset.t); };
+    L.apply(app);
+    $('#pt').onclick = function (e) { var b = e.target.closest('[data-t]'); if (!b) return; this.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); body(b.dataset.t); L.apply($('#pbody')); };
      $('#dlb').onclick = async function () {
        var btn = this, msg = $('#dm');
        if (btn.disabled) return;
-       btn.disabled = true; msg.className = 'fm'; msg.textContent = 'Đang chuẩn bị tải xuống…';
+       btn.disabled = true; msg.className = 'fm'; msg.textContent = L.t('Đang chuẩn bị tải xuống…');
        try {
          var file = await API.downloadProject(slug);
-         if (file.err) { msg.className = 'fm bad'; msg.textContent = file.err; return; }
+         if (file.err) { msg.className = 'fm bad'; msg.textContent = L.t(file.err); return; }
          if (file.mode === 'url') { window.location.assign(file.url); return; }
          var objectUrl = URL.createObjectURL(file.blob), a = document.createElement('a');
          a.href = objectUrl; a.download = file.fileName; a.rel = 'noopener'; a.style.display = 'none';
          document.body.appendChild(a); a.click(); a.remove();
          window.setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 60000);
-         msg.className = 'fm ok'; msg.textContent = 'Đã bắt đầu tải ' + file.fileName + '.';
-       } catch (e) { msg.className = 'fm bad'; msg.textContent = 'Không thể tải tệp. Hãy thử lại.'; }
+         msg.className = 'fm ok'; msg.textContent = L.t('Đã bắt đầu tải xuống.');
+       } catch (e) { msg.className = 'fm bad'; msg.textContent = L.t('Không thể tải tệp. Hãy thử lại.'); }
        finally { btn.disabled = false; }
      };
   }
@@ -109,7 +129,7 @@
 
   /* ---------- hộp thoại "Tạo dự án" ---------- */
   function newProject() {
-    var me = API.user(), st = { vis: 'public', type: '', cats: [], collab: [], icon: '', banner: '', downloadMode: 'upload', file: null, url: '' }, edited = false;
+    var me = API.user(), st = { vis: 'public', type: '', cats: [], collab: [], icon: '', banner: '', resolution: '', downloadMode: 'upload', file: null, url: '' }, edited = false;
     function fld(l, b) { return '<div class="fl2"><b>' + l + '</b>' + b + '</div>'; }
     function seg(id, arr) { return '<div class="seg" id="' + id + '" role="group">' + arr.map(function (x) { return '<button type="button" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>'; }
     var m = document.createElement('div'); m.id = 'mo'; m.className = 'mo'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'Tạo dự án');
@@ -120,11 +140,12 @@
       fld('Loại dự án', seg('mt', TY)) +
       fld('Chủ sở hữu', '<input value="@' + esc(me.username) + '" disabled><small>Bạn là chủ sở hữu của dự án này.</small>') +
       fld('Cộng tác viên (không bắt buộc)', '<div class="chips" id="mc"></div><input id="mq" placeholder="Gõ @tên người dùng để tìm..." autocomplete="off"><div class="sug" id="msg"></div>') +
-      fld('Tệp tải xuống', seg('mdo', [['upload', 'Tải tệp lên'], ['url', 'Dùng URL']]) + '<div id="mdpanel"></div><small>File tải lên tối đa 25 MB. Bản demo lưu tệp trên thiết bị hiện tại; để mọi người tải được, cần máy chủ/object storage.</small>') +
+      fld('Tệp tải xuống', seg('mdo', [['upload', 'Tải tệp lên'], ['url', 'Dùng URL']]) + '<div id="mdpanel"></div><small>' + (API.remote ? 'Tệp tải lên tối đa 25 MB và được lưu trong kho riêng của Modium.' : 'File tải lên tối đa 25 MB. Bản demo lưu tệp trên thiết bị hiện tại; để mọi người tải được, cần máy chủ/object storage.') + '</small>') +
       '<div id="mcat"></div><div id="mimg"></div>' +
       fld('Mô tả ngắn', '<textarea id="mm" maxlength="200" rows="3" placeholder="Dự án này thêm..."></textarea><small>Một hai câu mô tả dự án của bạn.</small>') +
       '</div><div class="mf"><div class="fm" id="me" role="alert"></div><button class="btn" id="mcx" type="button">Hủy</button><button class="btn p" id="mok" type="button">Tạo dự án</button></div></div>';
     document.body.appendChild(m);
+    L.apply(m);
     var g = function (s) { return m.querySelector(s); };
     function close(to) { m.remove(); if (to) location.hash = to; }
     function mark(id, v) { g('#' + id).querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-pressed', b.dataset.v === v); }); }
@@ -133,16 +154,20 @@
     }
     function extras() {
       var cats = st.type ? BR.cats(st.type) : [], ban = st.type === 'modpacks' || st.type === 'resourcepacks';
-      g('#mcat').innerHTML = st.type ? fld('Chủ đề (chọn nhiều)', '<div class="seg" id="mk">' + cats.map(function (c) { return '<button type="button" data-v="' + c[0] + '" class="' + (st.cats.indexOf(c[0]) > -1 ? 'on' : '') + '">' + c[1] + '</button>'; }).join('') + '</div>') : '';
-       g('#mimg').innerHTML = '<div class="imgs"><div><b>Ảnh đại diện</b><div class="ip sq">' + (st.icon ? '<img src="' + esc(st.icon) + '" alt="">' : ic(I.box)) + '</div><button class="btn" type="button" data-f="icon">Chọn ảnh</button></div>' +
-          (ban ? '<div><b>Ảnh bìa (thumbnail)</b><div class="ip wd">' + (st.banner ? '<img src="' + esc(st.banner) + '" alt="">' : ic(I.box)) + '</div><button class="btn" type="button" data-f="banner">Chọn ảnh</button></div>' : '') + '<input type="file" id="mf" accept="image/png,image/jpeg,image/webp" hidden></div>';
+      var catField = st.type ? fld('Chủ đề (chọn nhiều)', '<div class="seg" id="mk">' + cats.map(function (c) { return '<button type="button" data-v="' + c[0] + '" class="' + (st.cats.indexOf(c[0]) > -1 ? 'on' : '') + '">' + c[1] + '</button>'; }).join('') + '</div>') : '';
+      var resField = st.type === 'resourcepacks' ? fld('Độ phân giải gói tài nguyên', '<select id="mres" required aria-label="Độ phân giải gói tài nguyên"><option value="">Chọn độ phân giải...</option>' + PRES.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join('') + '</select><small>Chọn độ phân giải của texture trong pack.</small>') : '';
+      g('#mcat').innerHTML = catField + resField;
+      if (st.type === 'resourcepacks') g('#mres').value = st.resolution;
+        g('#mimg').innerHTML = '<div class="imgs"><div><b>Ảnh đại diện</b><div class="ip sq">' + (st.icon ? '<img src="' + esc(st.icon) + '" alt="">' : ic(I.box)) + '</div><button class="btn" type="button" data-f="icon">Chọn ảnh</button></div>' +
+           (ban ? '<div><b>Ảnh bìa (thumbnail)</b><div class="ip wd">' + (st.banner ? '<img src="' + esc(st.banner) + '" alt="">' : ic(I.box)) + '</div><button class="btn" type="button" data-f="banner">Chọn ảnh</button></div>' : '') + '<input type="file" id="mf" accept="image/png,image/jpeg,image/webp" hidden></div>';
+      L.apply(g('#mcat')); L.apply(g('#mimg'));
     }
     function fileSize(n) { return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / (1024 * 1024)).toFixed(1) + ' MB'; }
     function renderDownload() {
       mark('mdo', st.downloadMode);
       if (st.downloadMode === 'url') {
         g('#mdpanel').innerHTML = '<input id="mdurl" type="url" maxlength="2048" placeholder="https://example.com/file.zip" autocomplete="url"><small>Chỉ chấp nhận liên kết HTTP/HTTPS. Khi bấm Tải xuống, trình duyệt sẽ mở liên kết này.</small>';
-        g('#mdurl').value = st.url; g('#mdurl').oninput = function () { st.url = this.value; };
+        g('#mdurl').value = st.url; g('#mdurl').oninput = function () { st.url = this.value; }; L.apply(g('#mdpanel'));
         return;
       }
       g('#mdpanel').innerHTML = '<div class="dropbox" id="mdrop"><b>Kéo thả tệp vào đây</b><span>ZIP, TXT, LUA hoặc định dạng tài nguyên khác</span><span id="mfn"></span></div><div class="drop-actions"><button class="btn" id="mchoose" type="button">Chọn tệp</button><button class="btn" id="mremove" type="button"' + (st.file ? '' : ' disabled') + '>Bỏ tệp</button><input type="file" id="mfile" hidden></div>';
@@ -152,19 +177,21 @@
       g('#mremove').onclick = function () { st.file = null; renderDownload(); };
       function choose(file) {
         if (!file) return;
-        if (file.size < 1 || file.size > 25 * 1024 * 1024) { st.file = null; g('#mfn').textContent = 'Tệp phải từ 1 byte đến 25 MB.'; g('#mremove').disabled = true; g('#me').textContent = 'Tệp vượt quá giới hạn dung lượng.'; return; }
+        if (file.size < 1 || file.size > 25 * 1024 * 1024) { st.file = null; g('#mfn').textContent = L.t('Tệp phải từ 1 byte đến 25 MB.'); g('#mremove').disabled = true; g('#me').textContent = L.t('Tệp vượt quá giới hạn dung lượng.'); return; }
         st.file = file; g('#mfn').textContent = file.name + ' · ' + fileSize(file.size); g('#mremove').disabled = false; g('#me').textContent = '';
       }
       input.onchange = function () { choose(this.files && this.files[0]); this.value = ''; };
       drop.ondragover = function (e) { e.preventDefault(); drop.classList.add('over'); };
       drop.ondragleave = function () { drop.classList.remove('over'); };
       drop.ondrop = function (e) { e.preventDefault(); drop.classList.remove('over'); choose(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]); };
+      L.apply(g('#mdpanel'));
     }
     var fk = '';
-    g('#mv').onclick = function (e) { var b = e.target.closest('[data-v]'); if (b) { st.vis = b.dataset.v; mark('mv', st.vis); g('#mvh').textContent = VS.filter(function (x) { return x[0] === st.vis; })[0][2]; } };
+     g('#mv').onclick = function (e) { var b = e.target.closest('[data-v]'); if (b) { st.vis = b.dataset.v; mark('mv', st.vis); g('#mvh').textContent = L.t(VS.filter(function (x) { return x[0] === st.vis; })[0][2]); } };
     g('#mdo').onclick = function (e) { var b = e.target.closest('[data-v]'); if (b) { if (g('#mdurl')) st.url = g('#mdurl').value; st.downloadMode = b.dataset.v; renderDownload(); } };
-    g('#mt').onclick = function (e) { var b = e.target.closest('[data-v]'); if (b) { st.type = b.dataset.v; st.cats = []; if (st.type !== 'modpacks' && st.type !== 'resourcepacks') st.banner = ''; mark('mt', st.type); extras(); } };
-    g('#mcat').onclick = function (e) { var b = e.target.closest('[data-v]'); if (!b) return; var i = st.cats.indexOf(b.dataset.v); if (i > -1) st.cats.splice(i, 1); else st.cats.push(b.dataset.v); b.classList.toggle('on'); };
+     g('#mt').onclick = function (e) { var b = e.target.closest('[data-v]'); if (b) { st.type = b.dataset.v; st.cats = []; if (st.type !== 'modpacks' && st.type !== 'resourcepacks') st.banner = ''; if (st.type !== 'resourcepacks') st.resolution = ''; mark('mt', st.type); extras(); } };
+     g('#mcat').onclick = function (e) { var b = e.target.closest('[data-v]'); if (!b) return; var i = st.cats.indexOf(b.dataset.v); if (i > -1) st.cats.splice(i, 1); else st.cats.push(b.dataset.v); b.classList.toggle('on'); };
+     g('#mcat').onchange = function (e) { if (e.target.id === 'mres') st.resolution = e.target.value; };
     g('#mimg').onclick = function (e) { var b = e.target.closest('[data-f]'); if (b) { fk = b.dataset.f; g('#mf').click(); } };
     g('#mimg').onchange = function (e) {
       var f = e.target.files && e.target.files[0]; if (!f) return;
@@ -172,10 +199,14 @@
     };
     g('#mn').oninput = function () { if (!edited) g('#ms').value = slugify(this.value); };
     g('#ms').oninput = function () { edited = true; };
-    g('#mq').oninput = function () {
-      var r = API.searchUsers(this.value);
+     var searchSeq = 0;
+     g('#mq').oninput = async function () {
+       var input = this, seq = ++searchSeq, r;
+       try { r = await API.searchUsers(input.value); } catch (e) { r = []; }
+       if (seq !== searchSeq || !input.isConnected) return;
        g('#msg').innerHTML = r.filter(function (x) { return st.collab.indexOf(x.username) < 0; }).map(function (x) { return '<button type="button" data-u="' + esc(x.username) + '">' + A.avatar(x) + '<span><b>' + esc(x.displayName || x.username) + '</b><small>@' + esc(x.username) + '</small></span></button>'; }).join('') || (this.value.replace('@', '') ? '<small>Không tìm thấy người dùng.</small>' : '');
-    };
+       L.apply(g('#msg'));
+     };
     g('#msg').onclick = function (e) { var b = e.target.closest('[data-u]'); if (b && st.collab.length < 10) { st.collab.push(b.dataset.u); chips(); this.innerHTML = ''; g('#mq').value = ''; } };
     g('#mc').onclick = function (e) { var b = e.target.closest('[data-r]'); if (b) { st.collab.splice(st.collab.indexOf(b.dataset.r), 1); chips(); } };
     g('#mx').onclick = g('#mcx').onclick = function () { close('#/dashboard'); };
@@ -184,16 +215,16 @@
     g('#mok').onclick = async function () {
       var submit = this;
       if (submit.disabled) return;
-      submit.disabled = true; submit.textContent = 'Đang tạo…';
+        submit.disabled = true; submit.textContent = L.t('Đang tạo…');
       try {
-        var r = await API.createProject({ vis: st.vis, name: g('#mn').value, slug: g('#ms').value, type: st.type, cats: st.cats, collab: st.collab, icon: st.icon, banner: st.banner, summary: g('#mm').value,
+        var r = await API.createProject({ vis: st.vis, name: g('#mn').value, slug: g('#ms').value, type: st.type, resolution: st.resolution, cats: st.cats, collab: st.collab, icon: st.icon, banner: st.banner, summary: g('#mm').value,
           downloadMode: st.downloadMode, file: st.file, url: g('#mdurl') ? g('#mdurl').value : st.url });
-        if (r.err) { g('#me').textContent = r.err; return; }
+        if (r.err) { g('#me').textContent = L.t(r.err); return; }
         close('#/project/' + r.slug);
-      } catch (e) { g('#me').textContent = 'Không thể tạo dự án. Hãy thử lại.'; }
-      finally { if (submit.isConnected) { submit.disabled = false; submit.textContent = 'Tạo dự án'; } }
+      } catch (e) { g('#me').textContent = L.t('Không thể tạo dự án. Hãy thử lại.'); }
+      finally { if (submit.isConnected) { submit.disabled = false; submit.textContent = L.t('Tạo dự án'); } }
     };
-    mark('mv', 'public'); g('#mvh').textContent = VS[0][2]; extras(); renderDownload(); g('#mn').focus();
+    mark('mv', 'public'); g('#mvh').textContent = L.t(VS[0][2]); extras(); renderDownload(); g('#mn').focus();
   }
 
   A.profile = profile; A.dash = dash; A.project = project; A.newProject = newProject;

@@ -50,9 +50,13 @@
       im.onerror = function () { say($('#pm'), 'Tệp không phải ảnh hợp lệ.'); };
       im.src = url;
     };
-    $('#ps').onclick = function () {
-      var r = API.updateProfile({ username: v('pu'), displayName: v('pd'), bio: v('pb'), avatar: av });
-      say($('#pm'), r.err || 'Đã lưu thay đổi.', !r.err); if (!r.err) A.header();
+    $('#ps').onclick = async function () {
+      var button = this; button.disabled = true;
+      try {
+        var r = await API.updateProfile({ username: v('pu'), displayName: v('pd'), bio: v('pb'), avatar: av });
+        say($('#pm'), r.err || 'Đã lưu thay đổi.', !r.err); if (!r.err) A.header();
+      } catch (e) { say($('#pm'), 'Không thể lưu thay đổi. Hãy thử lại.'); }
+      finally { button.disabled = false; }
     };
   }
 
@@ -71,19 +75,20 @@
   }
   function security(el, u, note) {
     el.innerHTML = '<h2>Tài khoản và bảo mật</h2>' + (note ? '<div class="fm ok">' + L.t(note) + '</div>' : '') +
-      sec('se', 'Email', 'Hiện tại: <b>' + esc(u.email) + '</b>', 'Đổi email', inp('e-n', 'Email mới', 'email', 'email') + inp('e-p', 'Mật khẩu hiện tại', 'password', 'current-password') + '<button class="btn p act">Lưu email</button>') +
-       sec('sp', 'Mật khẩu', 'Đổi mật khẩu đăng nhập của bạn.', 'Đổi mật khẩu', inp('m-o', 'Mật khẩu hiện tại', 'password', 'current-password') + inp('m-n', 'Mật khẩu mới (≥ 12 ký tự)', 'password', 'new-password') + inp('m-c', 'Xác nhận mật khẩu mới', 'password', 'new-password') + '<button class="btn p act">Đổi mật khẩu</button>') +
+       sec('se', 'Email', 'Hiện tại: <b>' + esc(u.email) + '</b>', 'Đổi email', inp('e-n', 'Email mới', 'email', 'email') + inp('e-p', 'Mật khẩu hiện tại', 'password', 'current-password') + (u.totp ? inp('e-t', 'Mã 2FA hiện tại', 'text', 'one-time-code') : '') + '<button class="btn p act">Lưu email</button>') +
+        sec('sp', 'Mật khẩu', 'Đổi mật khẩu đăng nhập của bạn.', 'Đổi mật khẩu', inp('m-o', 'Mật khẩu hiện tại', 'password', 'current-password') + inp('m-n', 'Mật khẩu mới (≥ 12 ký tự)', 'password', 'new-password') + inp('m-c', 'Xác nhận mật khẩu mới', 'password', 'new-password') + (u.totp ? inp('m-t', 'Mã 2FA hiện tại', 'text', 'one-time-code') : '') + '<button class="btn p act">Đổi mật khẩu</button>') +
       sec('s2', 'Xác thực hai bước (2FA)', u.totp ? '<span class="st2 on">Đang bật</span> Cần mã từ ứng dụng khi đăng nhập.' : '<span class="st2">Đang tắt</span> Thêm một lớp bảo vệ khi đăng nhập.', u.totp ? 'Tắt 2FA' : 'Thiết lập',
-        u.totp ? inp('t-p', 'Mật khẩu hiện tại', 'password', 'current-password') + '<button class="btn d act">Tắt 2FA</button>'
+         u.totp ? inp('t-p', 'Mật khẩu hiện tại', 'password', 'current-password') + inp('t-off-code', 'Mã 2FA hiện tại', 'text', 'one-time-code') + '<button class="btn d act">Tắt 2FA</button>'
                : '<button class="btn" id="t-g">Tạo khóa bí mật</button><div id="t-b"></div>') +
       sec('sx', 'Xuất dữ liệu', 'Tải về bản sao dữ liệu tài khoản của bạn (JSON).', 'Xuất', '<button class="btn p" id="xp">' + ic(D.dl) + 'Tải xuống</button>') +
-       sec('sd', 'Xóa tài khoản', 'Hành động này không thể hoàn tác.', 'Xóa', inp('d-c', 'Nhập tên @ "@' + esc(u.username) + '" để xác nhận', 'text', 'off') + inp('d-p', 'Mật khẩu hiện tại', 'password', 'current-password') + '<button class="btn d act">' + ic(D.trash) + 'Xóa tài khoản vĩnh viễn</button>', true);
+        sec('sd', 'Xóa tài khoản', 'Hành động này không thể hoàn tác.', 'Xóa', inp('d-c', 'Nhập tên @ "@' + esc(u.username) + '" để xác nhận', 'text', 'off') + inp('d-p', 'Mật khẩu hiện tại', 'password', 'current-password') + (u.totp ? inp('d-t', 'Mã 2FA hiện tại', 'text', 'one-time-code') : '') + '<button class="btn d act">' + ic(D.trash) + 'Xóa tài khoản vĩnh viễn</button>', true);
     var again = function (r, msg) { if (!r.err) security(el, API.user(), msg); return r; };
-    run('se', async function () { return again(await API.changeEmail(v('e-p'), v('e-n')), 'Đã đổi email.'); });
-    run('sp', async function () { return again(await API.changePassword(v('m-o'), v('m-n'), v('m-c')), 'Đã đổi mật khẩu.'); });
-    if (u.totp) run('s2', async function () { return again(await API.totpDisable(v('t-p')), 'Đã tắt xác thực hai bước.'); });
-    else $('#t-g').onclick = function () {
-       var s = API.totpBegin();
+     run('se', async function () { return again(await API.changeEmail(v('e-p'), v('e-n'), u.totp ? v('e-t') : ''), 'Đã đổi email.'); });
+     run('sp', async function () { return again(await API.changePassword(v('m-o'), v('m-n'), v('m-c'), u.totp ? v('m-t') : ''), 'Đã đổi mật khẩu.'); });
+     if (u.totp) run('s2', async function () { return again(await API.totpDisable(v('t-p'), v('t-off-code')), 'Đã tắt xác thực hai bước.'); });
+     else $('#t-g').onclick = async function () {
+        var s;
+        try { s = await API.totpBegin(); } catch (e) { s = { err: 'Không thể tạo khóa xác thực hai bước.' }; }
        if (s.err) { say($('#s2 .fm'), s.err); return; }
        $('#t-b').innerHTML = '<p>Nhập khóa này vào ứng dụng xác thực (Google Authenticator, Authy, 2FAS…):</p><code class="sk">' + s.secret + '</code>' +
         '<p><small>Trên điện thoại có thể mở liên kết: <a href="' + esc(s.uri) + '">otpauth</a></small></p>' + inp('t-c', 'Mã 6 số hiện trong ứng dụng', 'text', 'one-time-code') + '<button class="btn p act">Bật 2FA</button>';
@@ -95,7 +100,7 @@
     };
     run('sd', async function () {
       if (v('d-c').trim().replace(/^@+/, '').toLowerCase() !== u.username.toLowerCase()) return { err: 'Hãy nhập đúng tên @ để xác nhận.' };
-      var r = await API.deleteAccount(v('d-p')); if (!r.err) A.go('#/'); return r;
+       var r = await API.deleteAccount(v('d-p'), u.totp ? v('d-t') : ''); if (!r.err) A.go('#/'); return r;
     });
   }
 

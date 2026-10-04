@@ -297,7 +297,8 @@
   function exportData() { var p = pub(user()); if (!p) return '{}'; p.created = new Date(p.created).toISOString(); return JSON.stringify(p, null, 2); }
 
   /* ================== DỰ ÁN (mod, modpack, gói tài nguyên, script, shader, công trình) ================== */
-  var PK = 'mdm_projects', PTYPES = ['mods', 'modpacks', 'resourcepacks', 'plugins', 'shaders', 'structures'], PVIS = ['public', 'unlisted', 'private'];
+  var PK = 'mdm_projects', PTYPES = ['mods', 'modpacks', 'resourcepacks', 'plugins', 'shaders', 'structures'], PVIS = ['public', 'unlisted', 'private'],
+    PRESOLUTIONS = ['8x', '16x', '32x', '48x', '64x', '128x', '256x', '512x'];
   function projs() { var p = rd(PK, []); return Array.isArray(p) ? p.filter(function (x) { return x && typeof x === 'object' && !Array.isArray(x); }) : []; }
   function me() { var n = sessionKey(), all = users(); return n && own(all, n) ? n : null; }
   function pubProfile(k) { var all = users(), key = handleKey(k), u = own(all, key) ? all[key] : null; return u ? { username: u.username, handle: '@' + u.username, displayName: displayOf(u), bio: bioOf(u), avatar: imageValue(u.avatar, 300000), created: u.created } : null; }
@@ -328,13 +329,13 @@
   function view(p) {
     var col = Array.isArray(p.collab) ? p.collab : [], cats = Array.isArray(p.cats) ? p.cats : [];
     return { slug: /^[a-z0-9-]{3,40}$/.test(p.slug) ? p.slug : '', name: goodText(text(p.name), 40) ? text(p.name) : '', type: PTYPES.indexOf(p.type) > -1 ? p.type : 'mods', vis: PVIS.indexOf(p.vis) > -1 ? p.vis : 'private', owner: pubProfile(p.owner), collab: col.map(pubProfile).filter(Boolean), cats: cats.filter(function (c) { return typeof c === 'string' && /^[a-z]{2,20}$/.test(c); }),
-      icon: imageValue(p.icon, 150000), banner: imageValue(p.banner, 350000), summary: goodText(text(p.summary), 200) ? text(p.summary) : '', download: projectDownload(p.download), created: +p.created || 0, updated: +p.updated || 0, downloads: Math.max(0, +p.downloads || 0), follows: Math.max(0, +p.follows || 0) };
+      resolution: p.type === 'resourcepacks' && PRESOLUTIONS.indexOf(p.resolution) > -1 ? p.resolution : '', icon: imageValue(p.icon, 150000), banner: imageValue(p.banner, 350000), summary: goodText(text(p.summary), 200) ? text(p.summary) : '', download: projectDownload(p.download), created: +p.created || 0, updated: +p.updated || 0, downloads: Math.max(0, +p.downloads || 0), follows: Math.max(0, +p.follows || 0) };
   }
   /* danh sách công khai cho trang duyệt (định dạng của browse.js) */
   function projects(type) {
     return projs().filter(function (p) { return p.vis === 'public' && p.type === type && pubProfile(p.owner); }).map(function (p) {
       var o = pubProfile(p.owner);
-      return { slug: p.slug, name: p.name, author: o.displayName, authorHandle: o.username, desc: p.summary, downloads: +p.downloads || 0, follows: +p.follows || 0, updated: new Date(+p.updated || Date.now()).toISOString(), categories: Array.isArray(p.cats) ? p.cats : [], icon: imageValue(p.icon, 150000), banner: imageValue(p.banner, 350000) };
+      return { slug: p.slug, name: p.name, author: o.displayName, authorHandle: o.username, desc: p.summary, downloads: +p.downloads || 0, follows: +p.follows || 0, updated: new Date(+p.updated || Date.now()).toISOString(), categories: Array.isArray(p.cats) ? p.cats : [], resolution: p.type === 'resourcepacks' && PRESOLUTIONS.indexOf(p.resolution) > -1 ? p.resolution : '', icon: imageValue(p.icon, 150000), banner: imageValue(p.banner, 350000) };
     });
   }
   function getProject(slug) { var p = projectBySlug(slug, me()); return p ? view(p) : null; }
@@ -372,6 +373,7 @@
     if (!/^[a-z0-9-]{3,40}$/.test(slug)) return { err: 'URL chỉ gồm chữ thường, số, dấu - (3–40 ký tự).' };
     if (list.some(function (p) { return String(p.slug || '').toLowerCase() === slug; })) return { err: 'URL này đã được dùng, hãy đổi tên khác.' };
     if (PTYPES.indexOf(f.type) < 0) return { err: 'Hãy chọn loại dự án.' };
+    if (f.type === 'resourcepacks' && PRESOLUTIONS.indexOf(f.resolution) < 0) return { err: 'Hãy chọn độ phân giải của gói tài nguyên.' };
     if (!sum || sum.length > 200 || !goodText(sum, 200)) return { err: 'Hãy nhập mô tả ngắn hợp lệ (tối đa 200 ký tự).' };
     var dl = null, fileId = null;
     if (f.downloadMode === 'url') {
@@ -393,7 +395,7 @@
     var cats = (Array.isArray(f.cats) ? f.cats : []).filter(function (c) { return typeof c === 'string' && /^[a-z]{2,20}$/.test(c); }).slice(0, 8), col = [], all = users();
     (Array.isArray(f.collab) ? f.collab : []).forEach(function (c) { var k = handleKey(c); if (k !== n && own(all, k) && col.indexOf(k) < 0) col.push(k); });
     var t = Date.now();
-    list.push({ slug: slug, name: name, type: f.type, vis: f.vis, owner: n, collab: col.slice(0, 10), cats: cats, icon: imageValue(f.icon, 150000),
+    list.push({ slug: slug, name: name, type: f.type, vis: f.vis, resolution: f.type === 'resourcepacks' ? f.resolution : '', owner: n, collab: col.slice(0, 10), cats: cats, icon: imageValue(f.icon, 150000),
       banner: (f.type === 'modpacks' || f.type === 'resourcepacks') ? imageValue(f.banner, 350000) : '', summary: sum, download: dl, created: t, updated: t, downloads: 0, follows: 0 });
     if (wr(PK, list)) return { ok: true, slug: slug };
     if (fileId) removeProjectFile(fileId).catch(function () {});

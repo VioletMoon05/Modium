@@ -98,13 +98,28 @@
   function num(n) { return n < 10000 ? n.toLocaleString('en-US') : n < 1e6 ? (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K' : (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'; }
   function ago(d) {
     var vi = L.get() === 'vi', n;
-    if (d < 1) return vi ? 'Hôm nay' : 'Today';
-    if (d < 7) return vi ? d + ' ngày trước' : d + (d === 1 ? ' day ago' : ' days ago');
-    if (d < 14) return vi ? 'Tuần trước' : 'Last week';
-    if (d < 30) { n = Math.floor(d / 7); return vi ? n + ' tuần trước' : n + ' weeks ago'; }
-    if (d < 60) return vi ? 'Tháng trước' : 'Last month';
-    if (d < 365) { n = Math.floor(d / 30); return vi ? n + ' tháng trước' : n + ' months ago'; }
-    n = Math.floor(d / 365); return vi ? n + ' năm trước' : n + (n === 1 ? ' year ago' : ' years ago');
+    if (vi) {
+      if (d < 1) return 'Hôm nay';
+      if (d < 7) return d + ' ngày trước';
+      if (d < 14) return 'Tuần trước';
+      if (d < 30) return Math.floor(d / 7) + ' tuần trước';
+      if (d < 60) return 'Tháng trước';
+      if (d < 365) return Math.floor(d / 30) + ' tháng trước';
+      return Math.floor(d / 365) + ' năm trước';
+    }
+    try {
+      var relative = new Intl.RelativeTimeFormat(L.get(), { numeric: 'auto' });
+      if (d < 1) return relative.format(0, 'day');
+      if (d < 7) return relative.format(-d, 'day');
+      if (d < 30) return relative.format(-Math.floor(d / 7), 'week');
+      if (d < 365) return relative.format(-Math.floor(d / 30), 'month');
+      return relative.format(-Math.floor(d / 365), 'year');
+    } catch (e) {
+      if (d < 1) return 'Today';
+      if (d < 30) return d + (d === 1 ? ' day ago' : ' days ago');
+      if (d < 365) return Math.floor(d / 30) + ' months ago';
+      n = Math.floor(d / 365); return n + (n === 1 ? ' year ago' : ' years ago');
+    }
   }
   function catList(t) { return t === 'resourcepacks' ? RP_CATS : CATS; }
   function layout() { return (S.lay && S.lay[B.t]) || (B.t === 'resourcepacks' ? 'grid' : 'rows'); }

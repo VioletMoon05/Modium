@@ -110,7 +110,7 @@
           field('f-u', 'Tên @ (duy nhất)', 'text', 'username', 'Ví dụ: @minh_nguyen — chỉ gồm chữ, số, dấu _ và -.', 'user', true, 20) + field('f-e', 'Email', 'email', 'email', '', 'mail', true, 120) +
           field('f-p', 'Mật khẩu', 'password', 'new-password', 'Ít nhất 12 ký tự', 'key', true, 128) + field('f-c', 'Xác nhận mật khẩu', 'password', 'new-password', '', 'key', true, 128) +
           '<label class="cb"><input type="checkbox" id="f-n"><span>Giữ cho tôi cập nhật những điều thú vị Modium đang làm qua email</span></label>'
-        : field('f-i', 'Email hoặc tên @', 'text', 'username', '', 'mail', false, 120) + field('f-p', 'Mật khẩu', 'password', 'current-password', '', 'key', false, 128)) +
+        : field('f-i', API.remote ? 'Email' : 'Email hoặc tên @', 'text', API.remote ? 'email' : 'username', '', 'mail', false, 120) + field('f-p', 'Mật khẩu', 'password', 'current-password', '', 'key', false, 128)) +
       '<div class="fe" id="fe" role="alert" aria-live="polite"></div>' +
       '<button class="btn p wide" id="fs" type="submit">' + (up ? 'Hoàn tất đăng ký' : 'Tiếp tục với Email') + ic(P.arr) + '</button></form>' +
       '<div class="al">' + (up ? 'Đã có tài khoản? <a href="#/signin">Đăng nhập</a>'
@@ -122,7 +122,15 @@
       x.onclick = function () { fe.textContent = L.t('Đăng nhập bằng dịch vụ bên ngoài cần máy chủ nên chưa khả dụng trong bản demo này.'); };
     });
     var fp = app.querySelector('[data-fp]');
-    if (fp) fp.onclick = function () { fe.textContent = L.t('Khôi phục mật khẩu cần máy chủ gửi email nên chưa khả dụng trong bản demo này.'); };
+    if (fp) fp.onclick = async function () {
+      if (!API.remote) { fe.textContent = L.t('Khôi phục mật khẩu cần máy chủ gửi email nên chưa khả dụng trong bản demo này.'); return; }
+      fp.disabled = true;
+      try {
+        var reset = await API.resetPassword($('#f-i').value);
+        fe.textContent = L.t(reset.err || 'Nếu email tồn tại, liên kết đặt lại mật khẩu sẽ được gửi đến hộp thư.');
+      } catch (x) { fe.textContent = L.t('Không thể gửi email khôi phục. Hãy thử lại.'); }
+      finally { fp.disabled = false; }
+    };
     f.onsubmit = async function (e) {
       e.preventDefault(); fe.textContent = ''; fs.disabled = true;
       var r;
@@ -131,10 +139,37 @@
                : await signIn($('#f-i').value, $('#f-p').value, ($('#f-t') || {}).value);
       } catch (x) { r = { err: 'Trình duyệt này không hỗ trợ mã hóa mật khẩu an toàn.' }; }
       fs.disabled = false;
-      if (r.need2fa && !$('#f-t')) { fe.insertAdjacentHTML('beforebegin', field('f-t', 'Mã xác thực 2 bước', 'text', 'one-time-code', '', 'key', true)); $('#f-t').focus(); }
+      if (r.need2fa) {
+        if (!$('#f-t')) fe.insertAdjacentHTML('beforebegin', field('f-t', 'Mã xác thực 2 bước', 'text', 'one-time-code', '', 'key', true));
+        fe.textContent = L.t('Nhập mã từ ứng dụng xác thực, rồi đăng nhập lại.');
+        $('#f-t').focus(); L.apply(app); return;
+      }
       if (r.err) { fe.textContent = L.t(r.err); return; }
+      if (r.confirmationRequired) { fe.className = 'fe ok'; fe.textContent = L.t('Kiểm tra email để xác nhận tài khoản trước khi đăng nhập.'); return; }
       var n = A.next || '#/'; A.next = null; go(n);
     };
+  }
+
+  function resetPasswordPage() {
+    if (!API.remote) {
+      app.innerHTML = '<div class="card auth"><h2>' + L.t('Đặt lại mật khẩu') + '</h2><p>' + L.t('Khôi phục mật khẩu cần máy chủ gửi email nên chưa khả dụng trong bản demo này.') + '</p><a class="btn p" href="#/signin">' + L.t('Đăng nhập') + '</a></div>';
+      L.apply(app); return;
+    }
+    var canReset = API.isPasswordRecovery && API.isPasswordRecovery(), user = canReset && API.user();
+    app.innerHTML = '<div class="card auth"><h2>' + L.t('Đặt lại mật khẩu') + '</h2><p>' + L.t(canReset ? 'Nhập mật khẩu mới để hoàn tất khôi phục.' : 'Liên kết khôi phục không hợp lệ hoặc đã hết hạn.') + '</p>' +
+      (canReset ? '<form id="rf"><label class="fl2"><b>' + L.t('Mật khẩu mới (≥ 12 ký tự)') + '</b><input id="rn" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label><label class="fl2"><b>' + L.t('Xác nhận mật khẩu mới') + '</b><input id="rc" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>' + (user.totp ? '<label class="fl2"><b>' + L.t('Mã 2FA hiện tại') + '</b><input id="r2" type="text" autocomplete="one-time-code" inputmode="numeric" required></label>' : '') + '<div id="re" class="fe" role="alert"></div><button class="btn p" type="submit">' + L.t('Lưu mật khẩu mới') + '</button></form>' : '') +
+      '<p><a href="#/signin">' + L.t('Đăng nhập') + '</a></p></div>';
+    var form = $('#rf');
+    if (form) form.onsubmit = async function (e) {
+      e.preventDefault(); var button = form.querySelector('button'), error = $('#re'); button.disabled = true;
+      try {
+        var result = await API.updateRecoveredPassword($('#rn').value, $('#rc').value, $('#r2') ? $('#r2').value : '');
+        if (result.err) error.textContent = L.t(result.err);
+        else { app.innerHTML = '<div class="card auth"><h2>' + L.t('Mật khẩu đã được cập nhật.') + '</h2><a class="btn p" href="#/signin">' + L.t('Đăng nhập') + '</a></div>'; L.apply(app); }
+      } catch (x) { error.textContent = L.t('Không thể cập nhật mật khẩu. Hãy thử lại.'); }
+      finally { if (button.isConnected) button.disabled = false; }
+    };
+    L.apply(app);
   }
 
   /* ---------- hồ sơ & bảng điều khiển ---------- */
@@ -149,5 +184,5 @@
       '<div class="card" style="margin-bottom:60px"><h3>Bạn chưa có dự án nào</h3><p style="margin:0">Tính năng đăng dự án chưa khả dụng trong bản demo này.</p></div>';
   }
 
-  window.A = { user: user, avatar: avatar, fmt: fmtDate, ic: ic, header: header, auth: authPage, dash: dash, esc: esc, next: null, go: go };
+  window.A = { user: user, avatar: avatar, fmt: fmtDate, ic: ic, header: header, auth: authPage, resetPasswordPage: resetPasswordPage, dash: dash, esc: esc, next: null, go: go };
 })();

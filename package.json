@@ -1,0 +1,1 @@
+{ "name": "modium", "private": true, "scripts": { "build": "node build.js" }, "devDependencies": { "javascript-obfuscator": "^4.1.0" } }

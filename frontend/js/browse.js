@@ -182,19 +182,25 @@
     return p.icon ? '<img class="pic ' + cls + '" src="' + esc(p.icon) + '" alt="" loading="lazy">'
       : '<div class="pic ' + cls + '" style="background:linear-gradient(135deg,hsl(' + p.hue + ' 68% 52%),hsl(' + ((p.hue + 40) % 360) + ' 66% 36%))" aria-hidden="true">' + esc(p.ini) + '</div>';
   }
-  function author(p) { return esc(p.a) + (p.ah ? ' <span class="handle">@' + esc(p.ah) + '</span>' : ''); }
+  function projectHref(p) { return p.slug ? (window.PAGE ? 'index.html' : '') + '#/project/' + encodeURIComponent(p.slug) : ''; }
+  function cardAttrs(p) { var href = projectHref(p); return href ? ' data-project-href="' + esc(href) + '"' : ''; }
+  function author(p) {
+    if (!p.ah) return esc(p.a);
+    var href = (window.PAGE ? 'index.html' : '') + '#/user/' + encodeURIComponent(p.ah);
+    return '<a class="author-link" href="' + esc(href) + '">' + esc(p.a) + ' <span class="handle">@' + esc(p.ah) + '</span></a>';
+  }
   function desc(p) { return esc(p.d[L.get() === 'vi' ? 0 : 1]); }
-  function nm(p) { return p.slug ? '<a href="' + (window.PAGE ? 'index.html' : '') + '#/project/' + esc(p.slug) + '">' + esc(p.n) + '</a>' : esc(p.n); }
+  function nm(p) { var href = projectHref(p); return href ? '<a href="' + esc(href) + '">' + esc(p.n) + '</a>' : esc(p.n); }
   function card(p) {
-    return '<article class="pj">' + icon(p, '') +
-      '<div class="pb"><h3>' + esc(p.n) + ' <span class="by"><span>bởi</span> ' + author(p) + '</span></h3><p class="pd2">' + desc(p) + '</p><div class="tgs">' + tagsOf(p) + '</div></div>' +
+    return '<article class="pj"' + cardAttrs(p) + '>' + icon(p, '') +
+      '<div class="pb"><h3>' + nm(p) + ' <span class="by"><span>bởi</span> ' + author(p) + '</span></h3><p class="pd2">' + desc(p) + '</p><div class="tgs">' + tagsOf(p) + '</div></div>' +
       '<div class="st"><span>' + ic(I.dl) + num(p.dl) + '</span><span>' + ic(I.heart) + num(p.fl) + '</span><span class="up">' + ic(I.clock) + ago(p.u) + '</span></div></article>';
   }
   /* thẻ có ảnh bìa (gói tài nguyên, dạng lưới) */
   function cardBanner(p) {
-    return '<article class="pj bnr"><div class="bn">' + (p.banner ? '<img src="' + esc(p.banner) + '" alt="" loading="lazy">'
+    return '<article class="pj bnr"' + cardAttrs(p) + '><div class="bn">' + (p.banner ? '<img src="' + esc(p.banner) + '" alt="" loading="lazy">'
       : '<div class="bnf" style="background:linear-gradient(135deg,hsl(' + p.hue + ' 60% 46%),hsl(' + ((p.hue + 50) % 360) + ' 60% 28%))" aria-hidden="true">' + esc(p.ini) + '</div>') + '</div>' +
-       '<div class="bb"><div class="bh">' + icon(p, 'sm') + '<div class="pb"><h3>' + esc(p.n) + ' <span class="by"><span>bởi</span> ' + author(p) + '</span></h3><p class="pd2">' + desc(p) + '</p></div></div>' +
+       '<div class="bb"><div class="bh">' + icon(p, 'sm') + '<div class="pb"><h3>' + nm(p) + ' <span class="by"><span>bởi</span> ' + author(p) + '</span></h3><p class="pd2">' + desc(p) + '</p></div></div>' +
       '<div class="tgs">' + tagsOf(p) + '</div>' +
       '<div class="st row"><span>' + ic(I.dl) + num(p.dl) + '</span><span>' + ic(I.heart) + num(p.fl) + '</span><span class="up">' + ic(I.clock) + ago(p.u) + '</span></div></div></article>';
   }
@@ -247,6 +253,8 @@
       if (p && !p.disabled) { B.pg = +p.dataset.p; res(); $('.tabs').scrollIntoView({ block: 'start' }); return; }
       if (e.target.closest('#bl')) { S.lay = S.lay || {}; S.lay[B.t] = layout() === 'rows' ? 'grid' : 'rows'; save(); res(); $('#bl').focus(); return; }
       if (e.target.closest('[data-clear]')) { var t = B.t; B = fresh(t); page(t); }
+      var card = e.target.closest('[data-project-href]');
+      if (card && !e.target.closest('a,button,input,select,textarea,label')) location.href = card.dataset.projectHref;
     };
     r.onchange = function (e) {
       if (e.target.id === 'bs') B.sort = e.target.value;

@@ -5,6 +5,7 @@
 - If the Supabase URL and key are blank, the site deliberately runs its local demo API. Its accounts/projects are editable through browser storage and are not secure or shared.
 - With Supabase configured, authentication and data use Supabase Auth/Postgres/Storage. The browser contains only a publishable/anon key; the database RLS policies in `supabase/schema.sql` enforce who can read or mutate each record. Never expose a service-role/secret key.
 - Cloudflare Pages serves static assets only. It does not provide the database, account service, or upload storage; those are provided by Supabase.
+- The GitHub Pages workflow publishes only the generated `dist/` folder, so loose source files are not separately served by the website. Anyone can still inspect the downloaded JavaScript bundle, and a public GitHub repository still exposes its source. Obfuscation does not hide secrets or replace server-side authorization.
 
 ## Protections in the Supabase schema
 
